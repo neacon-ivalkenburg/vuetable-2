@@ -29,13 +29,23 @@
                     :style="{width: field.width}"
                   :class="['vuetable-th-sequence', field.titleClass || '']" v-html="renderTitle(field)">
               </th>
-              <th v-if="notIn(extractName(field.name), ['__sequence', '__checkbox', '__component', '__slot'])"
+              <th v-if="notIn(extractName(field.name), ['__sequence', '__checkbox', '__component', '__slot']) && !field.abbr"
                     :style="{width: field.width}"
                   :class="['vuetable-th-'+field.name, field.titleClass || '']" v-html="renderTitle(field)">
               </th>
+              <th v-if="notIn(extractName(field.name), ['__sequence', '__checkbox', '__component', '__slot'])"
+                    :style="{width: field.width}"
+                  :class="['vuetable-th-'+field.name, field.titleClass || '']">
+                  <abbr :title="field.name" v-html="renderTitle(field)"></abbr>
+              </th>
             </template>
             <template v-else>
-              <th @click="orderBy(field, $event)"
+              <th v-if="field.abbr" @click="orderBy(field, $event)"
+                :id="'_' + field.name"
+                  :style="{width: field.width}"
+                :class="['vuetable-th-'+field.name, field.titleClass,  {'sortable': isSortable(field)}]"
+              ><abbr :title="field.abbr" v-html="renderTitle(field)"></abbr></th>
+              <th v-else @click="orderBy(field, $event)"
                 :id="'_' + field.name"
                   :style="{width: field.width}"
                 :class="['vuetable-th-'+field.name, field.titleClass,  {'sortable': isSortable(field)}]"
@@ -55,7 +65,7 @@
           <template v-for="field in tableFields">
             <template v-if="field.visible">
               <template>
-                <col 
+                <col
                   :id="'_col_' + field.name"
                   :style="{width: field.width}"
                   :class="['vuetable-th-'+field.name, field.titleClass]"
@@ -134,7 +144,7 @@
   </div>
 </div>
 <table v-else :class="['vuetable', css.tableClass]"> <!-- no fixed header - regular table -->
-  <thead> 
+  <thead>
     <tr>
       <template v-for="field in tableFields">
         <template v-if="field.visible">
@@ -161,13 +171,23 @@
                 :style="{width: field.width}"
                 :class="['vuetable-th-sequence', field.titleClass || '']" v-html="renderTitle(field)">
             </th>
-            <th v-if="notIn(extractName(field.name), ['__sequence', '__checkbox', '__component', '__slot'])"
+            <th v-if="notIn(extractName(field.name), ['__sequence', '__checkbox', '__component', '__slot']) && !field.abbr"
                 :style="{width: field.width}"
                 :class="['vuetable-th-'+field.name, field.titleClass || '']" v-html="renderTitle(field)">
             </th>
+            <th v-if="notIn(extractName(field.name), ['__sequence', '__checkbox', '__component', '__slot'])"
+                :style="{width: field.width}"
+                :class="['vuetable-th-'+field.name, field.titleClass || '']">
+              <abbr :title="field.name" v-html="renderTitle(field)"></abbr>
+            </th>
           </template>
           <template v-else>
-            <th @click="orderBy(field, $event)"
+            <th v-if="field.abbr" @click="orderBy(field, $event)"
+              :id="'_' + field.name"
+              :style="{width: field.width}"
+              :class="['vuetable-th-'+field.name, field.titleClass,  {'sortable': isSortable(field)}]"
+            ><abbr :title="field.abbr" v-html="renderTitle(field)"></abbr></th>
+            <th v-else @click="orderBy(field, $event)"
               :id="'_' + field.name"
               :style="{width: field.width}"
               :class="['vuetable-th-'+field.name, field.titleClass,  {'sortable': isSortable(field)}]"
@@ -197,7 +217,7 @@
               </td>
               <td v-if="extractName(field.name) === '__component'" :class="['vuetable-component', field.dataClass]">
                 <component :is="extractArgs(field.name)"
-                  :row-data="item" :row-index="index" :row-field="field.sortField"
+                  :row-data="item" :row-index="index" :row-field="field.sortField" :options="field.options"
                 ></component>
               </td>
               <td v-if="extractName(field.name) === '__slot'" :class="['vuetable-slot', field.dataClass]">
@@ -296,9 +316,7 @@ export default {
     },
     dataManager: {
       type: Function,
-      default () {
-        return null
-      }
+      default: null,
     },
     dataPath: {
         type: String,
@@ -554,7 +572,7 @@ export default {
         }
         this.lastScrollPosition = horizontal;
       }
-      
+
     },
     normalizeFields () {
       if (typeof(this.fields) === 'undefined') {
@@ -578,6 +596,7 @@ export default {
         } else {
           obj = {
             name: field.name,
+            abbr: field.abbr,
             width: field.width,
             title: (field.title === undefined) ? self.setTitle(field.name) : field.title,
             sortField: field.sortField,
@@ -585,6 +604,7 @@ export default {
             dataClass: (field.dataClass === undefined) ? '' : field.dataClass,
             callback: (field.callback === undefined) ? '' : field.callback,
             visible: (field.visible === undefined) ? true : field.visible,
+            options: (field.options === undefined) ? {} : field.options,
           }
         }
         self.tableFields.push(obj)
@@ -693,7 +713,7 @@ export default {
           + 'You can explicitly suppress this warning by setting pagination-path="".'
         )
       }
-      
+
       this.$nextTick(function() {
         this.fixHeader()
         this.fireEvent('pagination-data', this.tablePagination)
@@ -704,7 +724,7 @@ export default {
       if (!this.isFixedHeader) {
         return;
       }
-      
+
       let elem = this.$el.getElementsByClassName('vuetable-body-wrapper')[0]
       if (elem != null) {
         if (elem.scrollHeight > elem.clientHeight) {
@@ -1127,12 +1147,13 @@ export default {
     callDataManager () {
       if (this.dataManager === null && this.data === null) return
 
-      if (Array.isArray(this.data)) {
+      if (Array.isArray(this.data) && this.apiMode) {
         console.log('data mode: array')
         this.setData(this.data)
       } else {
         this.normalizeSortOrder()
-        this.setData(this.dataManager(this.sortOrder, this.makePagination()))
+
+        this.setData(this.dataManager ? this.dataManager(this.sortOrder, this.makePagination()) : this.data)
       }
     },
     onRowClass (dataItem, index) {
